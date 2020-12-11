@@ -6,7 +6,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="https://liubog2008.github.io/"/>
-  <updated>2020-11-30T13:58:44.465Z</updated>
+  <updated>2020-12-11T12:37:20.854Z</updated>
   <id>https://liubog2008.github.io/</id>
   
   <author>
@@ -15,6 +15,32 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>Kubernetes 源码分析之 kubelet(三)</title>
+    <link href="https://liubog2008.github.io/2020/12/11/kubernetes/kubelet-3/"/>
+    <id>https://liubog2008.github.io/2020/12/11/kubernetes/kubelet-3/</id>
+    <published>2020-12-11T12:33:54.000Z</published>
+    <updated>2020-12-11T12:37:20.854Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="Version"><a href="#Version" class="headerlink" title="Version"></a>Version</h2><p>v1.18.2</p><h2 id="syncPod"><a href="#syncPod" class="headerlink" title="syncPod"></a>syncPod</h2><p>syncPod 会在 <code>pkg/kubelet/pod_workers.go</code> 下的 <code>managePodLoop</code> 函数中被调用，在触发前会先调用 <code>podCache.GetNewerThan</code> 来获取最新的 <code>kubecontainer.PodStatus</code></p><p>然后 syncPod 会处理以下两种情况</p><ol><li>删除 pod (updateType == SyncPodKill)</li><li>创建更新同步 pod</li></ol><a id="more"></a><p>删除 pod 的逻辑相对比较简单，暂时不深入分析了，将关注点集中在另一种情况时。</p><ol><li>根据 container runtime 实际情况生成期望的 api PodStatus</li><li>statusManager 获取当前的 api PodStatus (从 apiserver)</li><li>statusManager 更新 api PodStatus</li><li>containerManager 处理 Cgroups 相关操作</li><li>volumeManager 处理 volume 相关功能</li><li>获取镜像 pullSecret, 调用 container runtime 去 SyncPod</li></ol><p>总的来说本文关注以下几个部分</p><ol><li>期望的 api PodStatus 如何生成</li><li>containerManager 是什么</li><li>volumeManager 是什么</li><li>以及最重要的 container runtime 相关的功能和实现</li></ol><h3 id="期望的-api-PodStatus-如何生成"><a href="#期望的-api-PodStatus-如何生成" class="headerlink" title="期望的 api PodStatus 如何生成"></a>期望的 api PodStatus 如何生成</h3><p>可以发现 pod status 的生成调用了 <code>kl.generateAPIPodStatus</code> 这个函数，这个函数有两个参数，一个是当前的 pod，一个是 podCache 中获取的 <code>kubecontainer.PodStatus</code></p><p>上述 podCache 定义在 <code>pkg/kubelet/container/cache.go</code> 下，可以发现 podCache 只是一个简单的 cache 层，用于维护最新的 <code>kubecontainer.PodStatus</code>，而 cache 的更新操作在 <code>pkg/kubelet/pleg/generic.go</code> 的 <code>relist</code> 函数中被调用。</p><p>这里可以发现 pleg 模块会定时从 container runtime 中获取状态，并且和当前 pod/container 状态对比，然后生成一些 pod 的生命周期事件，最终触发相关操作。</p><p>当 <code>kubecontainer.PodStatus</code> 被更新，<code>syncPod</code> 就会被触发，进而生成 api PodStatus</p><h3 id="containerManager-是什么"><a href="#containerManager-是什么" class="headerlink" title="containerManager 是什么"></a>containerManager 是什么</h3><p>containerManager 定义在 <code>pkg/kubelet/cm/container_manager.go</code> 中，整个接口的定义比较杂乱，总的来说整个 manager 是用来管理一些 cgroups 相关的操作和结构。</p><p>了解这部分代码前可以先了解一下 kubernetes 管理下整个 cgroups 的结构树，详细的内容之后再深入讨论。</p><h3 id="volumeManager"><a href="#volumeManager" class="headerlink" title="volumeManager"></a>volumeManager</h3><p>volumeManager 定义在 <code>pkg/kubelet/volumemanager/volume_manager.go</code> 中，负责 kubelet 和 volume 的交互。</p><p>整个 volume 的功能实现也是一个非常大的模块，也涉及到了 kubernetes 的核心扩展 CSI(container storage interface)，之后了解 CSI 的时候再深入讨论这部分代码</p><h3 id="container-runtime"><a href="#container-runtime" class="headerlink" title="container runtime"></a>container runtime</h3><p>containerRuntime 定义在 <code>pkg/kubelet/container/runtime.go</code> 中，containerRuntime 负责和容器运行时交互的所有操作，也就是整个 kubelet 中最核心的部分。</p><p>目前 containerRuntime 的实现定义在 <code>pkg/kubelet/kuberuntime/kuberuntime_manager.go</code></p><p>下篇文章讲讲 kuberuntime 如何和 kubernetes 最核心的扩展 CRI(container runtime interface) 交互，以及 CRI 相关的内容</p><h2 id="最后"><a href="#最后" class="headerlink" title="最后"></a>最后</h2><p>本次分析解决了一些问题</p><ul><li><code>pleg</code> 模块到底做了什么</li><li><code>syncPod</code> 做了一些什么</li></ul><p>带来了如下问题</p><ul><li>containerManager 以及 pod 的 cgroups 结构</li><li>volumeManager 以及 CSI</li><li>containerRuntime 以及 CRI</li></ul><p>剩余</p><ul><li>为什么需要定时触发 <code>syncCh</code></li><li>为什么需要 <code>housekeeping</code></li><li>containerManager 以及 pod 的 cgroups 结构</li><li>volumeManager 以及 CSI</li><li>containerRuntime 以及 CRI</li></ul>]]></content>
+    
+    <summary type="html">
+    
+      &lt;h2 id=&quot;Version&quot;&gt;&lt;a href=&quot;#Version&quot; class=&quot;headerlink&quot; title=&quot;Version&quot;&gt;&lt;/a&gt;Version&lt;/h2&gt;&lt;p&gt;v1.18.2&lt;/p&gt;&lt;h2 id=&quot;syncPod&quot;&gt;&lt;a href=&quot;#syncPod&quot; class=&quot;headerlink&quot; title=&quot;syncPod&quot;&gt;&lt;/a&gt;syncPod&lt;/h2&gt;&lt;p&gt;syncPod 会在 &lt;code&gt;pkg/kubelet/pod_workers.go&lt;/code&gt; 下的 &lt;code&gt;managePodLoop&lt;/code&gt; 函数中被调用，在触发前会先调用 &lt;code&gt;podCache.GetNewerThan&lt;/code&gt; 来获取最新的 &lt;code&gt;kubecontainer.PodStatus&lt;/code&gt;&lt;/p&gt;&lt;p&gt;然后 syncPod 会处理以下两种情况&lt;/p&gt;&lt;ol&gt;&lt;li&gt;删除 pod (updateType == SyncPodKill)&lt;/li&gt;&lt;li&gt;创建更新同步 pod&lt;/li&gt;&lt;/ol&gt;
+    
+    </summary>
+    
+      <category term="kubernetes" scheme="https://liubog2008.github.io/categories/kubernetes/"/>
+    
+      <category term="code" scheme="https://liubog2008.github.io/categories/kubernetes/code/"/>
+    
+    
+      <category term="kubernetes" scheme="https://liubog2008.github.io/tags/kubernetes/"/>
+    
+      <category term="kubelet" scheme="https://liubog2008.github.io/tags/kubelet/"/>
+    
+  </entry>
   
   <entry>
     <title>Kubernetes 源码分析之 kubelet(二)</title>
